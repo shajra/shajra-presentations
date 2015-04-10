@@ -1,0 +1,553 @@
+#+TITLE: Type Classes:  Basics and More
+#+AUTHOR: Sukant Hajra
+#+STARTUP: beamer
+#+OPTIONS: H:2
+#+LATEX_HEADER: \AtBeginSection{\frame{\sectionpage}}
+#+LATEX_HEADER: \mode<beamer>{\usetheme{Madrid}}
+
+
+* Introduction
+
+** A show of hands
+
+- How many of you are very new to type classes?
+
+- This talk is yours, so interrupt and participate!
+
+
+** Some background
+
+Type classes
+
+- come from Haskell
+- use the word ``class'' differently from OO languages
+- started off a way to improve ad hoc polymorphism
+- evolved into a modular way to abstract invariants/contracts.
+
+
+** Types of polymorphism
+
+*** parametric polymorphism (generics)
+#+BEGIN_SRC scala
+Foo[A]
+#+END_SRC
+
+*** subtype polymorphism
+#+BEGIN_SRC scala
+Foo extends Bar
+#+END_SRC
+
+*** ad hoc polymorphism (overloading)
+#+BEGIN_SRC scala
+def baz(foo: Foo): Baz
+def baz(bar: Bar): Baz
+#+END_SRC
+
+
+* Motivation by Examples
+
+** Before we start with examples
+
+- Don't get caught up in the details
+- We'll cover details in a later section
+
+
+** Problem: ad hoc polymorphism
+
+*** given
+#+BEGIN_SRC scala
+def size(foo: Foo): Int
+def size(bar: Bar): Int
+#+END_SRC
+
+*** hard to generalize/extend, have to continue overloading
+#+BEGIN_SRC scala
+def size_doubled(foo: Foo) = size(foo: Foo) * 2
+def size_doubled(bar: Bar) = size(bar: Bar) * 2
+#+END_SRC
+
+*** or maybe use a sum type like Either
+#+BEGIN_SRC scala
+def size_doubled(fooOrBar: Either[Foo, Bar]) =
+  fooOrBar.fold(size(_), size(_)) * 2
+#+END_SRC
+
+
+** Solving with type classes: ad hoc polymorphism
+
+*** we have an interface
+#+BEGIN_SRC scala
+trait HasSize[A] { def size(a: A): Int }
+#+END_SRC
+*** which we can use as a constraint
+#+BEGIN_SRC scala
+def sizeDoubled[A : HasSize](a: A) =
+  HasSize[A].size(a) * 2
+#+END_SRC
+*** but only if we have instances
+#+BEGIN_SRC scala
+implicit val fooHasSize: HasSize[Foo] =
+  new HasSize[Foo] { def size(f: Foo) = f.size }
+implicit val barHasSize: HasSize[Bar] =
+  new HasSize[Bar] { def size(b: Bar) = b.size }
+#+END_SRC
+*** Note
+:PROPERTIES:
+:BEAMER_ENV: beamercolorbox
+:END:
+Note the nice separation of concerns.
+
+
+
+** type classes catch errors statically
+
+*** given
+#+BEGIN_SRC scala
+case class Foo(size: Int)
+case class Bar(size: Int)
+#+END_SRC
+
+*** using HasSize
+:PROPERTIES:
+:BEAMER_ENV: example
+:END:
+#+BEGIN_SRC scala
+scala> sizeDoubled(Foo(5))
+res0: Int = 5
+scala> sizeDoubled(Bar(3))
+res0: Int = 3
+scala> sizeDoubled("wat?")
+<console>:25: error: could not find implicit value for
+              evidence parameter of type HasSize[String]
+
+              sizeDoubled("wat?")
+                         ^
+#+END_SRC
+
+
+** Nicer error messages
+
+*** Using @implicitNotFound on the type class interface
+#+BEGIN_SRC scala
+@annotation.implicitNotFound(
+  "instance of type class HasSize not found: ${A}")
+trait HasSize[A] { def size(a: A): Int }
+#+END_SRC
+
+*** we can get more human-friendly messages
+:PROPERTIES:
+:BEAMER_ENV: example
+:END:
+#+BEGIN_SRC scala
+scala> sizeDoubled("wat?")
+<console>:14: error: instance of type class HasSize
+              not found: String
+
+              sizeDoubled("wat?")
+                         ^
+#+END_SRC
+
+
+** Problem: equality
+
+*** A typical ~equals~
+#+BEGIN_SRC scala
+class This {
+  override def equals(that: Any): Boolean =
+     if (! that.isInstanceOf[This])
+        false
+     else
+        ...
+}
+#+END_SRC
+
+*** Note
+:PROPERTIES:
+:BEAMER_ENV: beamercolorbox
+:END:
+- leads to obligatory boilerplate
+- the compiler should sometimes prevent equality comparison
+
+
+** Solving with type classes: equality
+
+*** we have an interface
+#+BEGIN_SRC scala
+trait Equal[A] { def eq(a1: A, a2: A): Boolean }
+#+END_SRC
+*** which we can use as a constraint
+#+BEGIN_SRC scala
+def member[A : Equal](as: List[A], a: A) =
+  as.foldLeft(false) { _ || Equal[A].eq(_, a) }
+#+END_SRC
+*** but only if we have instances
+#+BEGIN_SRC scala
+implicit val fooEqual: Equal[Foo] =
+  new Equal[Foo] {
+    def eq(f1: Foo, f2: Foo) = f1.x == f2.x
+  }
+#+END_SRC
+
+
+** Using type classes for type enrichment
+
+*** EqualOps.scala
+#+BEGIN_SRC scala
+implicit class EqualOps[A : Equal](a1: A) {
+  def ===(a2: A): Boolean = Equal[A].eq(a1, a2)
+}
+#+END_SRC
+
+*** Note
+:PROPERTIES:
+:BEAMER_ENV: beamercolorbox
+:END:
+- implicit vals/defs for type class instances
+- implicit classes for type enrichment
+
+
+** Type class equality is safer
+
+*** Using the equality type class
+:PROPERTIES:
+:BEAMER_ENV: example
+:END:
+#+BEGIN_SRC
+scala> new Foo(1) == new Foo(1)
+res0: Boolean = false
+
+scala> new Foo(1) == "wat?"
+res1: Boolean = false
+
+scala> new Foo(1) === new Foo(1)
+res2: Boolean = true
+
+scala> new Foo(1) === "wat?"
+<console>:24: error: type mismatch;
+ found   : String("wat?")
+ required: Foo
+              new Foo(1) === "wat?"
+#+END_SRC
+
+
+** Example: Monoid
+
+*** we have an interface
+#+BEGIN_SRC scala
+trait Monoid[A] {
+  def mappend(a1: A, a2: A): A
+  def mempty: A
+}
+#+END_SRC
+
+*** which we can use as a constraint
+#+BEGIN_SRC scala
+def empty[A : Monoid]: A = Monoid[A].mempty
+
+implicit class MonoidOps[A : Monoid](a1: A) {
+  def |+|(a2: A): A = Monoid[A].mappend(a1, a2)
+}
+#+END_SRC
+
+
+** Monoid instances
+
+*** here's some monoid instances
+#+BEGIN_SRC scala
+implicit val stringMonoid: Monoid[String] =
+  new Monoid[String] {
+    def mappend(s1: String, s2: String) = s1 + s2
+    def mempty = ""
+  }
+
+implicit def pairMonoid[A : Monoid, B : Monoid]
+    : Monoid[(A, B)] =
+  new Monoid[(A, B)] {
+    def mappend(p1: (A, B), p2: (A, B)) =
+      (p1._1 |+| p2._1, p1._2 |+| p2._2)
+    def mempty = (empty[A], empty[B])
+  }
+#+END_SRC
+
+
+** Automatic derivation
+
+*** Using the equality type class
+:PROPERTIES:
+:BEAMER_ENV: example
+:END:
+#+BEGIN_SRC
+scala> "a" |+| "1"
+res0: String = a1
+
+scala> ("a", "b") |+| ("1", "2")
+res1: (String, String) = (a1,b2)
+
+scala> ("a", ("b", "c")) |+| ("1", ("2", "3"))
+res2: (String, (String, String)) = (a1,(b2,c3))
+
+scala> empty[String]
+res3: String = ""
+
+scala> empty[(String, (String, String))]
+res4: (String, (String, String)) = ("", ("", ""))
+#+END_SRC
+
+
+** Relation to objects
+
+- dispatch of interfaces (though static, not dynamic)
+- same principles, but more
+  - single responsibility
+  - open/close principle
+  - interface segregation
+  - strong contracts
+
+
+** Lawful type classes: strong contracts
+
+*** Equality Laws
+For all ~a~, ~b~, and ~c~ of any type with an Equal constrant
+- *Reflexivity*: $eq(a, a)$
+- *Symmetry*: $eq(a, b) \equiv eq(b, a)$
+- *Transitivity*: $eq(a, b) \land eq(b, c) \equiv eq(a, c)$
+
+*** Monoid Laws
+For all ~a~, ~b~, and ~c~ of any type with a Monoid constrant
+- *Left Identity*: $mappend(mempty, a) \equiv a$
+- *Right Identity*: $mappend(a, mempty) \equiv a$
+- *Associativity*: $mappend(a, mappend(b, c)) \equiv mappend(mappend(a, b), c)$
+
+
+** What a type class is
+
+*** Type Class
+:PROPERTIES:
+:BEAMER_ENV: definition
+:END:
+A /type class/ is a *constraint/interface* that can be specified on a type
+signature for a parametric type.  At the call site, the corresponding
+instance/implementation is *statically* (at compile-time) derived, provided,
+and *guaranteed to always be the same*.
+
+*** Ideally
+Type classes *should be lawful*.
+
+
+** Example: Functor
+
+*** we have an interface
+#+BEGIN_SRC scala
+trait Functor[F[_]] {
+  def fmap[A](fa: F[A], f: A=>B): F[B]
+}
+#+END_SRC
+
+*** with the following laws
+- *Identity*: $fmap(fa, identity) \equiv fa$
+- *Composition*: $fmap(fa, a\ andThen\ b) \equiv fmap(fmap(fa, a), b)$
+
+
+** Is this a good type class?
+
+
+
+*** type class for an isomorphism
+#+BEGIN_SRC scala
+trait Iso[A, B] {
+  def to(a: A): B
+  def from(b: B): A
+}
+#+END_SRC
+*** Something to note
+:PROPERTIES:
+:BEAMER_ENV: beamercolorbox
+:END:
+- it has laws
+  - $to(from(b)) \equiv b$
+  - $from(to(a)) \equiv a$
+- but is it going to be unique?
+
+
+** Summary of type class benefits
+
+- an improved alternative to ad hoc polymorphism
+- nicely externally extensible (separation of concerns)
+- automatic derivation of type class instances
+- strong invariants with lawful type classes
+
+* Encoding type classes in Scala
+
+
+** Uses and abuses of implicits
+
+Good usage:
+
+- type enrichment
+- type class encoding
+
+Easily abused usage:
+
+- type conversion (beyond scope, but basically an implicit function)
+
+Terrible usage:
+
+- dependency injection framework encoding
+
+
+
+** Implicits, illustrated
+
+In Scala, we encode type classes with implicits, so let's cover those first.
+
+
+*** implicits in Scala
+:PROPERTIES:
+:BEAMER_ENV: example
+:END:
+#+BEGIN_SRC
+scala> case class Foo(name: String)
+
+scala> implicit val defaultFoo = Foo("default")
+
+scala> def fooPair(i: Int)(implicit foo: Foo) = (i, foo)
+
+scala> fooPair(3)
+res0: (Int, Foo) = (3,Foo(default))
+#+END_SRC
+*** Something to note
+:PROPERTIES:
+:BEAMER_ENV: beamercolorbox
+:END:
+The implicit parameter doesn't need an argument explicitly passed if a value
+for the type has been implicitly defined and can be found by the compiler.
+
+
+
+** Implicit extras
+
+*** useful, and in the standard library
+#+BEGIN_SRC scala
+def implicitly[A](implicit a: A): A = a
+#+END_SRC
+
+*** /context bound/ syntax sugar; these are the same
+#+BEGIN_SRC scala
+def foo[A](implicit ev: TC[A]) = ...
+
+def foo[A : TC] = {
+  val ev = implicitly[TC[A]]
+  ...
+}
+#+END_SRC
+
+
+
+** Implicit extra extras
+
+*** using implicitly with context bounds is tedious
+#+BEGIN_SRC scala
+def foo[A : HasSize] = {
+  ... implicitly[HasSize[A]].size ...
+}
+#+END_SRC
+
+*** we can get better syntax
+#+BEGIN_SRC scala
+def foo[A : HasSize] = {
+  ... HasSize[A].size ...
+}
+#+END_SRC
+
+*** with an ~apply~ method on the type class's companion object
+#+BEGIN_SRC scala
+object HasSize {
+  def apply[A](implicit ev: HasSize[A]): HasSize[A] = ev
+}
+#+END_SRC
+
+
+** Implicit scope resolution for type class encoding
+
+- Implicit scope resolution is kind of complex.
+
+- For type class instances keep it simple and put them in
+
+    - companion objects of the types you control
+
+    - package objects for types you don't control
+
+- When searching for an implicit ~A[B]~, companion objects for both ~A~ and ~B~
+  will be searched.
+
+- Remember to have one and only one instance to find (otherwise you're not
+  encoding a proper type class!)
+
+
+
+** Example encoding with companion objects
+
+*** HasSize.scala
+#+BEGIN_SRC scala
+trait HasSize[A] { def size[A](a: A): Int }
+object HasSize {
+  @inline
+  def apply[A](implicit ev: HasSize[A]): HasSize[A] = ev
+  implicit def listHasSize[A]: HasSize[List[A]] =
+    new HasSize[List[A]] { def size(l: List[A]) = l.size }
+}
+#+END_SRC
+
+*** Foo.scala
+#+BEGIN_SRC scala
+case class Foo(size: Int)
+object Foo {
+  implicit val hasSize: HasSize[Foo] =
+    new HasSize[Foo] { def size(f: Foo) = f.size }
+}
+#+END_SRC
+
+
+
+** Example encoding with package objects
+
+
+*** Instances.scala
+#+BEGIN_SRC scala
+trait Instances {
+  implicit def listHasSize[A]: HasSize[List[A]] =
+    new HasSize[List[A]] { def size(l: List[A]) = l.size }
+}
+
+object Instances extends Instances
+#+END_SRC
+
+*** package.scala
+#+BEGIN_SRC scala
+package object myproject extends Instances
+#+END_SRC
+
+*** Something to note
+:PROPERTIES:
+:BEAMER_ENV: beamercolorbox
+:END:
+- useful when you control neither the type class nor the data type
+- to avoid compilation complexity, some people never put instances on type
+  class companion objects (just the data type)
+
+
+* A Glance at Scalaz (Scaladoc, Demo)
+
+
+* Wrap-up
+
+** Thanks!
+
+Any questions?  Comments?
+
+*** References
+- Wadler, Blott, /How to make ad-hoc polymorphism less ad hoc/
+- Hudak, Hughes, Jones, Wadler, /A History of Haskell: Being Lazy With Class/
+- Kmett, /Type Classes vs. the World/, https://youtu.be/hIZxTQP1ifo
+- Yang, /Type classes: confluence, coherence, and global uniqueness/
+- Jones, Jones, Meijer, /Type classes: an exploration of the design space/
