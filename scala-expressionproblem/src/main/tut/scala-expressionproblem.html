@@ -21,7 +21,7 @@
 class: center, middle
 
 # Extensible Abstractions
-## (the expression problem)
+## (the Expression Problem)
 ### Sukant Hajra / @shajra
 
 ---
@@ -32,7 +32,7 @@ class: center, middle
 > the data type and new functions over the data type, without recompiling
 > existing code, and while retaining static type safety.”
 >
-> — Phil Wadler
+> — Phil Wadler, an email he sent in 1998
 
 ---
 
@@ -40,21 +40,312 @@ class: center, middle
 
 * extensible data implementations
 * extensible operations
-* strong type safey
+* strong type safety
 * no modification
 * no duplication
 * independent extensibility
 
 ---
 
-```tut
+# A concrete example
 
-type A = Int
+* “Expression Problem,” Walder's example of a calulator AST
+* incrementally extending an AST with:
+  * integer literals
+  * addition (+)
+  * multiplication (*)
+* incrementatally supporting operations over the AST:
+  * evaluate the expression
+  * render (pretty print)
+
+---
+
+# Expression Problem in psuedocode
+
+A first release might give us just `eval` and `+`
 
 ```
+  eval<1 + 2> ⇝ 3
+```
+
+A second release might give `*` (without breaks/modifying)
+
+```
+  eval<1 + 2 * 3> ⇝ 7
+```
+
+A third might give `render`
+
+```
+  render<1 + 2 * 3> ⇝ "1 + 2 * 3"
+```
+
+Or maybe we get `render` before `*`
+
+---
+
+class: center, middle
+
+# Broken Attempts
+## (to explore the design space)
+
+---
+
+# An algebraic attempt (with ADTs)
+
+Here's some data representations:
+
+```tut:silent
+trait Expr
+case class Lit(i: Int) extends Expr
+case class Add(x: Expr, y: Expr) extends Expr
+```
+
+We can't seal this trait (if we have to extend it)
+
+---
+
+# An algebraic attempt breaks
+
+```tut:silent
+def eval(e: Expr): Int =
+  e match {
+    case Lit(i) => i
+    case Add(x, y) => eval(x) + eval(y)
+  }
+
+def render(e: Expr): String =
+  e match {
+    case Lit(i) => s"${i}"
+    case Add(x, y) => s"${x} + ${y}"
+  }
+```
+
+* We can add new operations,
+* but not new data representations (like a `Mult` case).
+
+
+---
+
+# An “OO” attempt (still broken)
+
+```tut:silent
+trait Eval {
+  def eval: Int
+}
+
+trait Render {
+  def render: String
+}
+
+case class Lit(i: Int) extends Eval with Render {
+  def eval = i
+  def render = s"${i}"
+}
+```
+
+* We can add new data representations,
+* but adding new operations requires modifying programs
+
+---
+
+class: center, middle
+
+# An actual solution
+## (a final encoding)
+
+---
+
+# Attribution
+
+* “object algebras” are full solution by Bruno Oliveira and Will Cook
+* object algebras are implementable in plain Java with subtyping
+* they are very proximal to Oleg Kiselyov's “final encoding” solution
+* but we'll use Scala with type classes, closer to Kiselyov's solution
+
+---
+
+# First representation
+
+```tut:silent
+trait AddOps[A] {
+  def lit(i: Int): A
+  def add(x: A, y: A): A
+}
+```
+
+* These look like the arguments to a fold (visitor)
+* We'll use `AddOps` as a type class
+
+---
+
+# First Operation
+
+Let's make a result type for our fold,
+
+```tut:silent
+case class Eval(i: Int) extends AnyVal
+```
+
+and an instance of the `AddOps` type class.
+
+```tut:silent
+implicit val evalAddOps: AddOps[Eval] =
+  new AddOps[Eval] {
+    def lit(i: Int) = Eval(i)
+    def add(x: Eval, y: Eval) = Eval(x.i + y.i)
+  }
+```
+
+This provides operations for what representation we know thus far.
+
+---
+
+# Making terms
+
+For convenience, we'll define some syntax assistance,
+
+```tut:silent
+implicit class LitSyntax(i: Int) {
+  def lit[A](implicit ops: AddOps[A]): A = ops.lit(i)
+}
+
+implicit class AddSyntax[A](a1: A) {
+  def +(a2: A)(implicit ops: AddOps[A]): A = ops.add(a1, a2)
+}
+```
+
+which allows us to define terms more tersely.
+
+```tut:silent
+def addTerm1[A : AddOps]: A = 1.lit[A] + 2.lit[A]
+def addTerm2[A : AddOps]: A = 3.lit[A] + 4.lit[A]
+def addTerm3[A : AddOps]: A = addTerm1[A] + addTerm2[A]
+```
+
+---
+
+# Evaluation
+
+Evaluation is straight-forward.
+
+```tut
+addTerm1[Eval]
+addTerm2[Eval]
+addTerm3[Eval]
+```
+
+---
+
+# More representation
+
+A multiplication representation:
+```tut:silent
+trait MultOps[A] {
+  def mult(x: A, y: A): A
+}
+```
+
+And syntax to use it:
+```tut
+implicit class MultSyntax[A](a1: A) {
+  def *(a2: A)(implicit ops: MultOps[A]): A = ops.mult(a1, a2)
+}
+```
+
+---
+
+# Building terms
+
+```tut:silent
+def multTerm[A : AddOps : MultOps]: A = 5.lit[A] * 6.lit[A]
+def mixedTerm[A : AddOps : MultOps]: A = multTerm[A] + addTerm1[A]
+```
+
+---
+
+# Extending first operation
+
+We can extend evaluation to multiplication.
+
+```tut:silent
+implicit val evalMultOps: MultOps[Eval] =
+  new MultOps[Eval] {
+    def mult(x: Eval, y: Eval) = Eval(x.i * y.i)
+  }
+```
+
+So we can evaluate our new multiplicative terms
+
+```tut
+multTerm[Eval]
+mixedTerm[Eval]
+```
+
+---
+
+# Extending with a new operation
+
+We can now make a Render result,
+
+```tut:silent
+case class Render(text: String) extends AnyVal
+```
+
+and define how it applies to our representations.
+
+```tut:silent
+implicit val renderAddOps: AddOps[Render] =
+  new AddOps[Render] {
+    def lit(i: Int) = Render(s"${i}")
+    def add(x: Render, y: Render) = Render(s"(${x.text} + ${y.text})")
+  }
+
+implicit val renderMultOps: MultOps[Render] =
+  new MultOps[Render] {
+    def mult(x: Render, y: Render) = Render(s"(${x.text} * ${y.text})")
+  }
+```
+
+---
+
+# It all works now
+
+```tut
+multTerm[Render]
+mixedTerm[Render]
+multTerm[Eval]
+mixedTerm[Eval]
+```
+
+**key to success**:
+* the separation of concerns of type classes
+* a function-based (church-encoded) form of our representation
+
+---
+
+class: center, middle
+
+# Wrapping Up
+
+---
+
+# More to learn
+
+* a dual “data types à la carte” solution by Swierstra
+* originally presented in Haskell
+* can be ported to Scala
+* with *free monads* can lead to extensible imperative command languages
+* a touch tricky, it's own talk really
+
+---
+
+# References
+
+* http://homepages.inf.ed.ac.uk/wadler/papers/expression/expression.txt
 
     </textarea>
-    <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js">
+    <script src="javascript/remark-latest.min.js">
     </script>
     <script>
       var slideshow = remark.create();
