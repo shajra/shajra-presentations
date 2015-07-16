@@ -26,13 +26,25 @@ class: center, middle
 
 ---
 
+# This material
+
+Literate programming actually worked for this presentation.
+
+Find it at https://github.com/shajra/shajra-presentations.
+
+This presentation is a combination of
+  * Rob Norris's `tut` SBT plugin (all code is compiler-checked)
+  * remark.js
+
+---
+
 # What's the problem?
 
 > “The goal is to define a data type by cases, where one can add new cases to
 > the data type and new functions over the data type, without recompiling
 > existing code, and while retaining static type safety.”
 >
-> — Phil Wadler, an email he sent in 1998
+> — Phil Wadler, an email he sent in 1998 to the java-genericity list
 
 ---
 
@@ -41,9 +53,12 @@ class: center, middle
 * extensible data implementations
 * extensible operations
 * strong type safety
-* no modification
-* no duplication
+* no modification or duplication to patch things
 * independent extensibility
+
+This is a stricter version of Betrand Meyer's “open/close” principle:
+
+* Modules should be *open* to extension, but *closed* to modification.
 
 ---
 
@@ -91,43 +106,7 @@ class: center, middle
 
 ---
 
-# An algebraic attempt (with ADTs)
-
-Here's some data representations:
-
-```tut:silent
-trait Expr
-case class Lit(i: Int) extends Expr
-case class Add(x: Expr, y: Expr) extends Expr
-```
-
-We can't seal this trait (if we have to extend it)
-
----
-
-# An algebraic attempt breaks
-
-```tut:silent
-def eval(e: Expr): Int =
-  e match {
-    case Lit(i) => i
-    case Add(x, y) => eval(x) + eval(y)
-  }
-
-def render(e: Expr): String =
-  e match {
-    case Lit(i) => s"${i}"
-    case Add(x, y) => s"${x} + ${y}"
-  }
-```
-
-* We can add new operations,
-* but not new data representations (like a `Mult` case).
-
-
----
-
-# An “OO” attempt (still broken)
+# “OO” attempt (broken, though)
 
 ```tut:silent
 trait Eval {
@@ -146,6 +125,60 @@ case class Lit(i: Int) extends Eval with Render {
 
 * We can add new data representations,
 * but adding new operations requires modifying programs
+
+---
+
+# Algebraic attempt (with ADTs)
+
+Here's some data representations:
+
+```tut:silent
+trait Expr
+case class Lit(i: Int) extends Expr
+case class Add(x: Expr, y: Expr) extends Expr
+```
+
+We can't seal this trait (if we have to extend it)
+
+---
+
+# Algebraic attempt breaks
+
+```tut:silent
+def eval(e: Expr): Int =
+  e match {
+    case Lit(i) => i
+    case Add(x, y) => eval(x) + eval(y)
+  }
+
+def render(e: Expr): String =
+  e match {
+    case Lit(i) => s"${i}"
+    case Add(x, y) => s"${x} + ${y}"
+  }
+```
+
+* We can add new operations,
+* but not new data representations (like a `Mult` case).
+
+---
+
+# A helpful observation
+
+* Pattern matches are really a “visitor” pattern
+* Pattern matches can be turned into a `fold` function
+
+```tut:silent
+def fold[A]
+    (e: Expr,
+      ifLit: Int => A,
+      ifAdd: (Expr, Expr) => A)
+    : A =
+  e match {
+    case Lit(i) => ifLit(i)
+    case Add(x, y) => ifAdd(x, y)
+  }
+```
 
 ---
 
@@ -175,7 +208,8 @@ trait AddOps[A] {
 ```
 
 * These look like the arguments to a fold (visitor)
-* We'll use `AddOps` as a type class
+* As an interface, we get an object-style extensibility
+* We'll use `AddOps` interface as a type class
 
 ---
 
@@ -215,19 +249,15 @@ implicit class AddSyntax[A](a1: A) {
 }
 ```
 
-which allows us to define terms more tersely.
+---
+
+# Defining and evaluating terms
 
 ```tut:silent
 def addTerm1[A : AddOps]: A = 1.lit[A] + 2.lit[A]
 def addTerm2[A : AddOps]: A = 3.lit[A] + 4.lit[A]
 def addTerm3[A : AddOps]: A = addTerm1[A] + addTerm2[A]
 ```
-
----
-
-# Evaluation
-
-Evaluation is straight-forward.
 
 ```tut
 addTerm1[Eval]
@@ -261,6 +291,8 @@ implicit class MultSyntax[A](a1: A) {
 def multTerm[A : AddOps : MultOps]: A = 5.lit[A] * 6.lit[A]
 def mixedTerm[A : AddOps : MultOps]: A = multTerm[A] + addTerm1[A]
 ```
+
+Note that a LitOps could be separated from AddOps
 
 ---
 
@@ -320,7 +352,8 @@ mixedTerm[Eval]
 
 **key to success**:
 * the separation of concerns of type classes
-* a function-based (church-encoded) form of our representation
+* the extensibility of interfaces with type classes
+* a decomposition of a `fold` function for a representation
 
 ---
 
