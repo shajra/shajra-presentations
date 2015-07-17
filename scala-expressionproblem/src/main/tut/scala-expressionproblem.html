@@ -154,7 +154,7 @@ def eval(e: Expr): Int =
 def render(e: Expr): String =
   e match {
     case Lit(i) => s"${i}"
-    case Add(x, y) => s"${x} + ${y}"
+    case Add(x, y) => s"${render(x)} + ${render(y)}"
   }
 ```
 
