@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+
+# Learning You a Haskell
+## (for greater Scala)
+### Sukant Hajra / @shajra
+
+---
+
+# Some Basics
+
+Here's some values:
+
+```tut
+1
+"hello"
+```
+
+Here's some functions:
+
+```tut
+def append1(s1: String, s2: String) = s1 ++ s2
+def append2(s1: String)(s2: String) = s1 ++ s2
+val append3: String => String => String = s1 => s2 => s1 ++ s2
+```
+
+---
+
+# Semigroup: a type class
+
+```tut:silent
+trait Semigroup[A] {
+  def mappend(a1: A, a2: A): A
+}
+
+implicit val string: Semigroup[String] =
+  new Semigroup[String] {
+    def mappend(s1: String, s2: String) = s1 ++ s2
+  }
+```
+
+```tut
+implicitly[Semigroup[String]].mappend("row", "boat")
+```
+
+---
+
+# Semigroup: nicer syntax for using type class
+
+```tut:silent
+implicit class SemigroupSyntax[A](a1: A) {
+  def mappend(a2: A)(implicit ops: Semigroup[A]): A = ops.mappend(a1, a2)
+}
+```
+
+```tut
+"row" mappend "boat"
+```
+---
+
+# This material
+
+Half-literate programming actually worked for this presentation.
+
+Find it at https://github.com/shajra/shajra-presentations.
+
+This presentation is a combination of
+  * Rob Norris's `tut` SBT plugin (all code is compiler-checked)
+  * remark.js
+
+    </textarea>
+    <script src="javascript/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
