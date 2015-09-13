@@ -26,22 +26,32 @@ class: center, middle
 
 ---
 
-# Some Basics
-
-Here's some values:
+# Values
 
 ```tut
 1
 "hello"
 ```
 
-Here's some functions:
+---
+
+# Functions
 
 ```tut
 def append1(s1: String, s2: String) = s1 ++ s2
 def append2(s1: String)(s2: String) = s1 ++ s2
-val append3: String => String => String = s1 => s2 => s1 ++ s2
+val append3: (String, String) => String = (s1, s2) => s1 ++ s2
+val append4: String => String => String = s1 => s2 => s1 ++ s2
 ```
+
+---
+
+# Algebraic Data Types
+
+trait Ord
+case object EQ extends Ord
+case object LT extends Ord
+case object GT extends Ord
 
 ---
 
