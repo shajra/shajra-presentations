@@ -9,10 +9,9 @@ What concepts from Haskell can help us when writing Scala?
 * Preliminaries
     * functions, type signatures
     * datatypes
-* Today's focus:
+* Today's focus: modeling algebraic concepts
     * **abstraction:** abstracting over algebraic concepts using typeclasses
-    * **more predictable refactoring:** typeclass laws
-    * **"programs for free":** instance resolution
+    * **"programs for free":** typeclass instance resolution
     * **higher-order abstraction:** higher-kinded types
 
 # Functions
@@ -68,23 +67,15 @@ maybe' _ f (Just a) = f a
 ```
 
 ```{.haskell}
-ghci> maybe "N/A" show (Just 32)
+ghci> maybe "N/A" show (Just 32)          -- 'show' is like toString
 "32"
 ghci> maybe "N/A" show Nothing
 "N/A"
 ```
 
-# Thinking algebraically
+# Abstraction
 
-*Example:* associative operations with a neutral element
-
-```{.haskell}
-("hello" ++ "world") ++ "" == "hello" ++ ("world" ++ "")
-
-(3 + 5) + 0 == 3 + (5 + 0)
-```
-. . .
-
+We often run into code with commonalities:
 ```{.haskell}
 concat :: [String] -> String
 concat []     = ""
@@ -94,37 +85,85 @@ sum :: [Int] -> Int
 sum []     = 0
 sum (x:xs) = x + sum xs
 ```
+```{.haskell}
+-- The common pattern, in pseudo-code:
+combineThings :: [thing] -> thing
+combineThings []     = someThing
+combineThings (x:xs) = x `thingOperation` combineThings xs
+```
 
-We'd like to abstract over this pattern.
+We can do a little better than this...
 
+# Abstraction: thinking algebraically
 
-# Thinking algebraically with typeclasses
+A **monoid** is
+
+1. a set
+2. an associative operation `<>`, and
+3. a neutral element `e` in the set
+
+satisfying the **monoid laws**:
 
 ```{.haskell}
-class Monoid a where      -- not in the OOP sense!
+forall x.              e <> x = x               -- left identity
+forall x.              x <> e = x               -- right identity
+forall x y z.   (x <> y) <> z = x <> (y <> z)   -- associativity
+```
+
+
+# Abstraction: thinking algebraically
+
+* Examples of monoids
+    * Integers with addition and zero
+    * Strings with concatenation and the empty string
+    * Maps with map union and the empty map
+    * [https://izbicki.me/blog/gausian-distributions-are-monoids](https://izbicki.me/blog/gausian-distributions-are-monoids)
+
+
+# Abstraction: thinking algebraically
+
+* Examples of monoids
+    * [Diagrams with **`atop`**](http://projects.haskell.org/diagrams/doc/quickstart.html#combining-diagrams) and the empty picture
+
+```{.haskell}
+example = square 1 # fc aqua `atop` circle 1
+```
+
+![](atop.png)
+
+
+# Abstraction with `class`
+
+```{.haskell}
+class Monoid a where       -- typeclass
   mempty :: a
   (<>)   :: a -> a -> a
 
   -- laws:
-  --   left identity    mempty <> x == x
-  --   right identity   x <> mempty == x
-  --   associativity    x <> (y <> z) == (x <> y) <> z
+  --   left identity    mempty <> x   = x
+  --   right identity   x <> mempty   = x
+  --   associativity    x <> (y <> z) = (x <> y) <> z
 ```
 
 . . .
 
 ```{.haskell}
-instance Monoid Int where
+instance Monoid Int where  -- typeclass instances
   mempty = 0
   x <> y = x + y
 
 instance Monoid String where
   mempty = ""
-  (<>)   = (++)
+  (<>)   = (++)            -- aside: pointfree style
 ```
 
-# Monoid-generic functions
+# Abstraction with `class`
 
+```{.haskell}
+mconcat :: Monoid a => [a] -> a      -- one definition, multiple realizations
+mconcat []     = mempty
+mconcat (x:xs) = x <> mconcat xs
+```
 ```{.haskell}
 concat :: [String] -> String         -- concat :: [String] -> String
 concat []     = ""                   -- concat = mconcat
@@ -133,10 +172,6 @@ concat (x:xs) = x ++ concat xs
 sum :: [Int] -> Int                  -- sum :: [Int] -> Int
 sum []     = 0                       -- sum = mconcat
 sum (x:xs) = x + sum xs
-
-mconcat :: Monoid a => [a] -> a
-mconcat []     = mempty
-mconcat (x:xs) = x <> mconcat xs
 ```
 ```{.haskell}
 ghci> mconcat [1,2,3]
@@ -145,25 +180,50 @@ ghci> mconcat ["a","b","c"]
 "abc"
 ```
 
-# Composing typeclass instances
+# "Programs for free": instance resolution
 
 ```{.haskell}
 instance (Monoid a, Monoid b) => Monoid (a,b) where
   mempty         = (mempty, mempty)
   (a,b) <> (c,d) = (a <> c, b <> d)
-
-
-mempty :: Int
-mempty :: String
-mempty :: (Int, String)
-
--- compiler figures out the correct mempty and (<>) to use
-mconcat [(1,(2,"a")), (7,(2,"b")), (0,(3,"c"))]
 ```
 
-# Mapping
+```{.haskell}
+ghci> -- the compiler figures out the correct mempty and (<>) to use
+ghci> mempty :: Int
+0
+ghci> mempty :: String
+""
+ghci> mempty :: (String, Int)
+("",0)
+ghci> mempty :: (Int, (Int, String))
+(0,(0,""))
+ghci> mconcat [(1,(2,"a")), (7,(2,"b")), (0,(3,"c"))] :: (Int, (Int, String))
+(8,(7,"abc"))
+```
 
-mapMaybe
-mapList
+# Higher-order abstraction
 
-abstracting over * -> *
+```{.haskell}
+mapMaybe :: (a -> b) -> Maybe a -> Maybe b
+mapMaybe f Nothing  = Nothing
+mapMaybe f (Just a) = Just (f a)
+
+mapEither :: (a -> b) -> Either e a -> Either e b
+mapEither f (Right a) = Right (f a)
+mapEither f (Left e)  = Left e            -- If it helps, think of:
+
+mapPair :: (a -> b) -> (c, a) -> (c, b)   -- ... -> MyPair c a -> MyPair c b
+mapPair f (c, a) = (c, f a)
+
+mapList :: (a -> b) -> [a] -> [b]         -- ... -> MyList a -> MyList b
+mapList f []     = []
+mapList f (a:as) = f a : map f as
+```
+. . .
+```{.haskell}
+-- The common pattern, in pseudo-code:
+mapThing :: (a -> b) -> (thing a) -> (thing b)
+```
+
+# Kinds
