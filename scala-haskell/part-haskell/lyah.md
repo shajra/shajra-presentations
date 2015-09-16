@@ -9,7 +9,7 @@ What concepts from Haskell can help us when writing Scala?
 * Preliminaries
     * functions, type signatures
     * datatypes
-* Today's focus: modeling algebraic concepts
+* Today's focus: thinking algebraically about programs
     * **abstraction:** abstracting over algebraic concepts using typeclasses
     * **"programs for free":** typeclass instance resolution
     * **higher-order abstraction:** higher-kinded types
@@ -92,7 +92,6 @@ combineThings []     = someThing
 combineThings (x:xs) = x `thingOperation` combineThings xs
 ```
 
-We can do a little better than this...
 
 # Abstraction: thinking algebraically
 
@@ -227,3 +226,62 @@ mapThing :: (a -> b) -> (thing a) -> (thing b)
 ```
 
 # Kinds
+
+# The `Functor` class
+
+```{.haskell}
+class Functor f where               -- f must have kind (* -> *)
+  fmap :: (a -> b) -> f a -> f b
+
+  -- laws:
+  --   identity                fmap id = id
+  --   associativity  fmap f . fmap g  = fmap (f . g)
+```
+
+. . .
+
+```{.haskell}
+instance Functor Maybe where
+  fmap = mapMaybe
+
+instance Functor Either where       -- Kind error! This won't compile
+  fmap = mapEither
+
+instance Functor (Either e) where   -- This compiles
+  fmap = mapEither
+```
+
+# The `Functor` class
+
+```{.haskell}
+increment :: Functor f => f Int -> f Int
+increment = fmap (+1)
+```
+
+```{.haskell}
+ghci> increment [1,2,3]
+[2,3,4]
+ghci> increment (Just 7)
+Just 8
+ghci> increment (Right 10)
+Right 11
+ghci> increment ("hello", 0)
+("hello",1)
+```
+
+# What is "higher-kinded"?
+
+
+Higher-order function:
+```{.haskell}
+ghci> -- takes a function ("parameterized value") as an argument
+ghci> :t map
+map :: (a -> b) -> [a] -> [b]
+```
+
+Higher-kinded type:
+```{.haskell}
+ghci> -- takes a parameterized type as an argument
+ghci> :k Functor
+(* -> *) -> Constraint
+```
