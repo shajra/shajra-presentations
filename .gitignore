@@ -1,3 +1,4 @@
+target/
 *.pdf
 /scala-typeclasses/*.tex
-target/
+scala-haskell/part-haskell/lyah.html
