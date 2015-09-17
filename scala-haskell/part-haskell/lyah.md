@@ -217,7 +217,7 @@ mapPair f (c, a) = (c, f a)
 
 mapList :: (a -> b) -> [a] -> [b]         -- ... -> MyList a -> MyList b
 mapList f []     = []
-mapList f (a:as) = f a : map f as
+mapList f (a:as) = f a : mapList f as
 ```
 . . .
 ```{.haskell}
