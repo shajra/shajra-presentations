@@ -225,7 +225,29 @@ mapList f (a:as) = f a : mapList f as
 mapThing :: (a -> b) -> (thing a) -> (thing b)
 ```
 
-# Kinds
+# Kinds: the "types" of types
+
+Terms have types:
+
+```{.haskell}
+ghci> :t True
+True :: Bool
+ghci> :t append
+append :: String -> String -> String
+ghci> :t append "Hello"
+append "Hello" :: String -> String
+```
+
+Types have kinds:
+
+```{.haskell}
+ghci> :k Bool
+Bool :: *
+ghci> :k Either
+Either :: * -> * -> *
+ghci> :k Either Int
+Either Int :: * -> *
+```
 
 # The `Functor` class
 
