@@ -230,22 +230,22 @@ mapThing :: (a -> b) -> (thing a) -> (thing b)
 Terms have types:
 
 ```{.haskell}
-ghci> :t True
+ghci> :type True
 True :: Bool
-ghci> :t append
+ghci> :type append
 append :: String -> String -> String
-ghci> :t append "Hello"
+ghci> :type append "Hello"
 append "Hello" :: String -> String
 ```
 
 Types have kinds:
 
 ```{.haskell}
-ghci> :k Bool
+ghci> :kind Bool
 Bool :: *
-ghci> :k Either
+ghci> :kind Either
 Either :: * -> * -> *
-ghci> :k Either Int
+ghci> :kind Either Int
 Either Int :: * -> *
 ```
 

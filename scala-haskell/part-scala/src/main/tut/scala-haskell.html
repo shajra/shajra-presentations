@@ -20,8 +20,7 @@
 
 class: center, middle
 
-# Learning You a Haskell
-## (for greater Scala)
+# Learn You a Haskell for Great Scala!
 ### Sukant Hajra / @shajra
 
 ---
@@ -29,8 +28,7 @@ class: center, middle
 # Values
 
 ```tut
-1
-"hello"
+val name: String = "hello"
 ```
 
 ---
@@ -44,47 +42,346 @@ val append3: (String, String) => String = (s1, s2) => s1 ++ s2
 val append4: String => String => String = s1 => s2 => s1 ++ s2
 ```
 
----
-
-# Algebraic Data Types
-
-trait Ord
-case object EQ extends Ord
-case object LT extends Ord
-case object GT extends Ord
-
----
-
-# Semigroup: a type class
+```tut:silent
+def appliesName(f: String => String): String = f(name)
+```
 
 ```tut:silent
-trait Semigroup[A] {
-  def mappend(a1: A, a2: A): A
+appliesName(append1("Hello, ", _))
+appliesName(append2("Hello, "))
+appliesName(append3("Hello, ", _))
+appliesName(append4("Hello, "))
+```
+
+---
+
+# Algebraic Data Types (ADTs)
+
+```tut:silent
+sealed trait Bool
+case object False extends Bool
+case object True extends Bool
+```
+
+Can Haskell do this?
+
+```tut:silent
+var onlyFalse: False.type = False
+```
+
+```tut:fail
+onlyFalse = True
+```
+
+Should it?
+
+---
+
+# Abstract Algebraic Data Types
+
+We prevent *data constructors* leaking out as *types* by making them private.
+
+```scala
+sealed trait Bool {
+  fold[A](ifTrue: A, ifFalse: A) =
+    this match {
+      case True => ifTrue
+      case False => ifFalse
+    }
 }
 
-implicit val string: Semigroup[String] =
-  new Semigroup[String] {
-    def mappend(s1: String, s2: String) = s1 ++ s2
-  }
+private case object False extends Bool
+private case object True extends Bool
+
+object Bool {
+  def myTrue: Bool = True
+  def myFalse: Bool = False
+}
+```
+
+---
+
+# Polymorphic ADTs
+
+```tut:silent
+sealed trait Maybe[A]
+case object Naught extends Maybe[Nothing]
+case class Just[A](a: A) extends Maybe[A]
+```
+
+Wait a second. . . this is broken.
+
+```tut:fail
+val noString: Maybe[String] = Naught
+```
+
+---
+
+# Polymorphic ADTs, second attempt
+
+```tut:silent
+sealed trait Maybe[A]
+case class Naught[A] extends Maybe[A]
+case class Just[A](a: A) extends Maybe[A]
+```
+
+This works, but creates objects for each `Naught` reference.
+
+```tut
+val noString: Maybe[String] = Naught()
+```
+
+---
+
+# Polymorphic ADTs, standard library approach
+
+```tut:silent
+sealed trait Maybe[+A]
+case object Naught extends Maybe[Nothing]
+case class Just[A](a: A) extends Maybe[A]
+```
+
+We have an efficient `Naught`, but we need to help the compiler from inferring
+`Maybe[Nothing]`.
+
+```tut:silent
+def maybeId[A](ma: Maybe[A]): Maybe[A] = ma
 ```
 
 ```tut
-implicitly[Semigroup[String]].mappend("row", "boat")
+maybeId(Naught)
+maybeId(Naught: Maybe[String])
+maybeId[String](Naught)
 ```
 
 ---
 
-# Semigroup: nicer syntax for using type class
+# The best of all worlds gets hacky
+
+```tut:invisible
+sealed trait Maybe[A]
+case object Naught extends Maybe[Nothing]
+case class Just[A](a: A) extends Maybe[A]
+```
+
+```scala
+sealed trait Maybe[A]
+private case object Naught extends Maybe[Nothing]
+private case class Just[A](a: A) extends Maybe[A]
+```
 
 ```tut:silent
-implicit class SemigroupSyntax[A](a1: A) {
-  def mappend(a2: A)(implicit ops: Semigroup[A]): A = ops.mappend(a1, a2)
+object Maybe {
+  def naught[A]: Maybe[A] = Naught.asInstanceOf[Maybe[A]]
+  def just[A](a:A): Maybe[A] = Just(a)
+  def fold[A, B](ma: Maybe[A])(ifNaught: B)(ifJust: A => B): B =
+    ma match {
+      case Naught => ifNaught
+      case Just(a) => ifJust(a)
+    }
+}
+```
+
+```tut
+Maybe.fold(Maybe.naught[Int])("naughty") { _.toString }
+```
+
+---
+
+# More ADTs
+
+```tut:silent
+sealed trait MyEither[A, B]
+case class MyLeft[A, B](a: A) extends MyEither[A, B]
+case class MyRight[A, B](b: B) extends MyEither[A, B]
+```
+
+```tut:silent
+case class MyPair[A, B](_1: A, _2: B)
+```
+
+```tut:silent
+sealed trait MyList[A]
+case class MyNil[A] extends MyList[A]
+case class Cons[A](head: A, tail: MyList[A]) extends MyList[A]
+```
+
+---
+
+# Monoid: a type class
+
+```tut:silent
+trait Monoid[A] {
+  def mempty: A
+  def mappend(x: A, y: A): A
+}
+
+object Monoid {
+
+  def apply[A](implicit ev: Monoid[A]): Monoid[A] = ev
+
+  implicit val intMonoid: Monoid[Int] =
+    new Monoid[Int] {
+      def mempty = 0
+      def mappend(x: Int, y: Int) = x + y
+    }
+
+  implicit val stringMonoid: Monoid[String] =
+    new Monoid[String] {
+      def mempty = ""
+      def mappend(x: String, y: String) = x ++ y
+    }
+
+}
+```
+
+```tut:invisible
+import Monoid.{intMonoid, stringMonoid}
+```
+
+---
+
+# Monoid: nicer syntax for using type class
+
+```tut:silent
+implicit class MonoidSyntax[A](a1: A) {
+  def mappend(a2: A)(implicit ev: Monoid[A]): A = ev.mappend(a1, a2)
 }
 ```
 
 ```tut
 "row" mappend "boat"
 ```
+
+---
+
+# Monoid: in use
+
+```tut:silent
+def mconcat[A : Monoid](ls: List[A]): A =
+  ls match {
+    case Nil => Monoid[A].mempty
+    case x :: xs => x mappend mconcat(xs)
+  }
+```
+
+```tut
+mconcat(List(1,2,3))
+mconcat(List("a","b","c"))
+```
+
+---
+
+# Programs for free
+
+```tut:silent
+implicit def pairMonoid[A : Monoid, B : Monoid]: Monoid[(A, B)] =
+  new Monoid[(A, B)] {
+    def mempty = (Monoid[A].mempty, Monoid[B].mempty)
+    def mappend(x: (A, B), y: (A, B)) = (x._1 mappend y._1, x._2 mappend y._2)
+  }
+```
+
+```tut
+Monoid[Int].mempty
+Monoid[String].mempty
+Monoid[(String, Int)].mempty
+Monoid[(Int, (Int, String))].mempty
+mconcat(List((1, (2, "a")), (7, (2, "b")), (0, (3, "c"))))
+```
+
+---
+
+# Types and Kinds
+
+```scala
+scala> :type true
+Boolean
+
+scala> :type { (_: String) ++ (_: String) }
+(String, String) => String
+
+scala> :type { (_: String) ++ (_: String) }.curried
+String => (String => String)
+
+scala> :type { (_: String) ++ (_: String) } curried "Hello"
+String => String
+
+scala> :kind Boolean
+scala.Boolean's kind is A
+
+scala> :kind Either
+scala.util.Either's kind is F[+A1,+A2]
+```
+
+Note, Scala's `:kind` function can't handle type aliases.
+
+---
+
+# Functor: a higher-kinded type class
+
+```tut:silent
+trait Functor[F[_]] {
+  def fmap[A, B](fa: F[A])(f: A => B): F[B]
+}
+
+object Functor {
+
+  def apply[F[_]](implicit ev: Functor[F]): Functor[F] = ev
+
+  implicit val optionFunctor: Functor[Option] =
+    new Functor[Option] {
+      def fmap[A, B](fa: Option[A])(f: A => B) = fa map f
+    }
+
+  implicit def eitherFunctor[C]: Functor[({type λ[a] = Either[C, a]})#λ] = {
+    type EitherC[a] = Either[C, a]
+    new Functor[EitherC] {
+      def fmap[A, B](fa: EitherC[A])(f: A => B): EitherC[B] = fa.right map f
+    }
+  }
+
+}
+```
+
+```tut:invisible
+import Functor.{optionFunctor, eitherFunctor}
+```
+
+---
+
+# Functor: nicer syntax
+
+```tut:silent
+implicit class FunctorSyntax[F[_], A](fa: F[A]) {
+  def fmap[B](f: A => B)(implicit ev: Functor[F]): F[B] = ev.fmap(fa)(f)
+}
+```
+
+```tut
+(Some(1): Option[Int]) fmap { _ + 1 }
+```
+
+Note, we need type ascription because Scala thinks `Some` is a type, and can't
+find the `Functor` instance for it.
+
+---
+
+# Functor: in use
+
+```tut:silent
+def increment[F[_] : Functor](f: F[Int]): F[Int] =
+  f fmap { _ + 1 }
+```
+
+```tut
+increment[Option](Some(7))
+increment[({type λ[a] = Either[String, a]})#λ](Right(10))
+```
+
+Again, we don't get great inference with the ADTs provided by Scala's standard
+library.
+
 ---
 
 # This material
