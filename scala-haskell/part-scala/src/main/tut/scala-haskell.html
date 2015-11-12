@@ -48,8 +48,10 @@ def appliesName(f: String => String): String = f(name)
 
 ```tut:silent
 appliesName(append1("Hello, ", _))
+appliesName((append1 _) curried "Hello, ")
 appliesName(append2("Hello, "))
 appliesName(append3("Hello, ", _))
+appliesName(append3 curried "Hello, ")
 appliesName(append4("Hello, "))
 ```
 
@@ -82,14 +84,7 @@ Should it?
 We prevent *data constructors* leaking out as *types* by making them private.
 
 ```scala
-sealed trait Bool {
-  fold[A](ifTrue: A, ifFalse: A) =
-    this match {
-      case True => ifTrue
-      case False => ifFalse
-    }
-}
-
+sealed trait Bool
 private case object False extends Bool
 private case object True extends Bool
 
@@ -101,8 +96,9 @@ object Bool {
 
 ---
 
-# Polymorphic ADTs
+# Polymorphic ADTs, an attempt
 
+Here's an attempt to make a polymorphic ADT:
 ```tut:silent
 sealed trait Maybe[A]
 case object Naught extends Maybe[Nothing]
@@ -141,8 +137,9 @@ case object Naught extends Maybe[Nothing]
 case class Just[A](a: A) extends Maybe[A]
 ```
 
-We have an efficient `Naught`, but we need to help the compiler from inferring
-`Maybe[Nothing]`.
+* an efficient `Naught`
+* but might accidentally infer `Maybe[Nothing]`
+* and variance can impede some inference.
 
 ```tut:silent
 def maybeId[A](ma: Maybe[A]): Maybe[A] = ma
@@ -174,16 +171,17 @@ private case class Just[A](a: A) extends Maybe[A]
 object Maybe {
   def naught[A]: Maybe[A] = Naught.asInstanceOf[Maybe[A]]
   def just[A](a:A): Maybe[A] = Just(a)
-  def fold[A, B](ma: Maybe[A])(ifNaught: B)(ifJust: A => B): B =
-    ma match {
-      case Naught => ifNaught
-      case Just(a) => ifJust(a)
-    }
 }
 ```
 
+```tut:silent
+def maybeId[A](ma: Maybe[A]): Maybe[A] = ma
+```
+
 ```tut
-Maybe.fold(Maybe.naught[Int])("naughty") { _.toString }
+maybeId(Maybe.naught)
+maybeId(Maybe.naught: Maybe[String])
+maybeId[String](Maybe.naught)
 ```
 
 ---
@@ -204,6 +202,23 @@ case class MyPair[A, B](_1: A, _2: B)
 sealed trait MyList[A]
 case class MyNil[A] extends MyList[A]
 case class Cons[A](head: A, tail: MyList[A]) extends MyList[A]
+```
+
+---
+
+# Scala pattern matching
+
+```tut:silent
+def option[A, B](b: B)(f: A => B)(oa: Option[A]): B =
+  oa match {
+    case Some(a) => f(a)
+    case None => b
+  }
+```
+
+```tut
+option[Int, String]("N/A")(_.toString)(Some(32))
+option[Int, String]("N/A")(_.toString)(None)
 ```
 
 ---
@@ -358,12 +373,18 @@ implicit class FunctorSyntax[F[_], A](fa: F[A]) {
 }
 ```
 
+We need type ascription because Scala thinks `Some` is a type, and can't
+find the `Functor` instance for it.
+
+```tut:fail
+Some(1) fmap { _ + 1 }
+```
+
+Here's the sad fix:
+
 ```tut
 (Some(1): Option[Int]) fmap { _ + 1 }
 ```
-
-Note, we need type ascription because Scala thinks `Some` is a type, and can't
-find the `Functor` instance for it.
 
 ---
 
