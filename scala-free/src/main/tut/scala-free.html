@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+  </head>
+  <body>
+<textarea id="source">
+
+class: center, middle
+
+# Something about Free Monads
+### Sukant Hajra / @shajra
+
+---
+
+# Ways to learn about free monads
+
+* Start with the mathematics
+  * pro: wonderful insights
+  * con: some people can get lost
+
+* Start with engineering problems
+  * pro: more people keep up
+  * con: math can seem mysterious
+  * con: an over-specialized understanding
+
+Not losing people is important.
+
+Let's start from the engineering side (it suits my competance anyway).
+
+---
+
+# A simple program
+
+```scala
+val a = Console.readLine
+val b = Console.readLine
+Console.println(s"${a.toUpperCase} ${b.toLowerCase}")
+```
+
+Here's a few observations:
+
+* has side-effects
+* does only one thing
+* hard to test
+* conjoins describing with doing
+
+---
+
+# The COMMAND™ Design Pattern
+
+We can represent our program in terms of a command language:
+
+```tut:silent
+sealed trait ConsoleOp
+case object ReadLine extends ConsoleOp
+case class PrintLine(s: String) extends ConsoleOp
+```
+
+* But how do we combine our commands?
+* Where's the type of the return value?
+
+This *algebraic data type (ADT)* representation is inadequate.
+
+---
+
+# Parameterizing return types
+
+```tut:silent
+sealed trait ConsoleOp[A]
+case object ReadLine extends ConsoleOp[String]
+case class PrintLine(s: String) extends ConsoleOp[Unit]
+```
+
+* Now we have return types.
+* It's not obvious how we compose them.
+
+Technically, this is a Generalized Algebraic Data Type (GADT) encoding.
+
+* GADTs in Scala are fragile.
+* GADTs in Scala are another talk.
+
+---
+
+# Fast-forward to the punch-line
+
+We're going to use Scalaz's `Free` to turn our `ConsoleOp` to a `ConsoleIO`:
+
+```tut:silent
+import scalaz.Free
+type ConsoleIO[A] = Free.FreeC[ConsoleOp, A]
+```
+
+Then we'll lift our data constructors to `ConsoleIO`:
+
+```tut:silent
+def readLine: ConsoleIO[String] =
+  Free.liftFC(ReadLine)
+
+def printLine(l: String): ConsoleIO[Unit] =
+  Free.liftFC(PrintLine(l))
+```
+---
+
+# Free is a monad
+
+Free has reasonable `map` and `flatMap` methods, so it works like this:
+
+```tut:silent
+def consoleRun: ConsoleIO[Unit] =
+  for {
+    a <- readLine
+    b <- readLine
+    _ <- printLine(s"${a.toUpperCase} ${b.toLowerCase}")
+  } yield ()
+```
+
+* composing commands with functions!
+* **just data** — doesn't *do* anything
+
+---
+
+# Reminder of desugaring
+
+For-yield syntax turns into these calls:
+
+```tut:silent
+def consoleRun: ConsoleIO[Unit] =
+  readLine flatMap { a =>
+    readLine flatMap { b =>
+      printLine(s"${a.toUpperCase} ${b.toLowerCase}")
+         .map { _ => () }
+    }
+  }
+```
+
+---
+
+# Write an interpretter
+
+To interpret our grammar, we need a natural transformation from ConsoleOp to a
+monad (we'll use `scalaz.concurrent.Task`).
+
+```tut:silent
+import scalaz.~>
+import scalaz.concurrent.Task
+```
+
+Here's our natural transformation:
+
+```tut:silent
+val consoleOpToTask: ConsoleOp ~> Task =
+  new (ConsoleOp ~> Task) {
+    def apply[A](op: ConsoleOp[A]): Task[A] =
+      op match {
+        case ReadLine =>
+          Task delay { Console.readLine }
+        case PrintLine(line) =>
+          Task delay { Console println line }
+      }
+  }
+
+```
+
+---
+
+# Interpret
+
+`Free` provides `runFC` to run our natural transformation:
+
+```tut:silent
+val consoleRunTask: Task[Unit] =
+  Free.runFC(consoleRun)(consoleOpToTask)
+```
+
+Now we have a `Task`
+
+* but it's still hard to test
+* an effect-less interpretter may be useful
+
+---
+
+# An effect-less interpretter
+
+We can use the `State` monad for testing:
+
+```tut:silent
+import scalaz.State
+```
+
+`State` is basically `S => (S, A)`
+
+---
+
+# Fake console state:
+
+Here's some immutable state for testing:
+
+```tut:silent
+case class ConsoleFake(in: List[String], out: List[String]) {
+    def read: (ConsoleFake, String) =
+      in match {
+        case (h :: t) => (copy(in=t), h)
+        case _        => (this, "")
+      }
+    def write(msg: String): (ConsoleFake, Unit) =
+      (copy(out=msg :: out), ())
+}
+```
+
+---
+
+# A testing interpretter
+
+Now we can make a natural transformation:
+
+```tut:silent
+type ConsoleState[A] = State[ConsoleFake, A]
+```
+
+```tut:silent
+val consoleOpToState: ConsoleOp ~> ConsoleState =
+  new (ConsoleOp ~> ConsoleState) {
+    def apply[A](op: ConsoleOp[A]): ConsoleState[A] =
+      op match {
+        case ReadLine => State { _.read }
+        case PrintLine(line) => State { _ write line }
+      }
+  }
+```
+
+---
+
+# We can run tests
+
+Again, we can interpret our program:
+
+```tut:silent
+val consoleRunFake: State[ConsoleFake, Unit] =
+  Free.runFC(consoleRun)(consoleOpToState)
+```
+
+and finally run it:
+
+```tut
+println(
+  consoleRunFake.
+    run(
+      ConsoleFake(
+        List("hElLo", "wOrLD"),
+        List.empty)))
+```
+
+---
+
+# Very different interpretters
+
+* `Task[Unit]`
+* `ConsoleFake => (ConsoleFake, Unit)`
+
+One interpretter is effectful.
+
+One interpretter is effect-less.
+
+---
+
+# You can *really* use this
+
+* At Rackspace we orchestrated web service calls.
+* At Cognitive Scale, we wrap an imperative STM library.
+* Rob Norris's Doobie project abstracts over JDBC.
+
+Rob deserves special credit; I've lifted various code snippets of his.
+
+---
+
+# Enough to be dangerous
+
+* You now know the FREE™ design pattern.
+* We've satisfied a host of design goals.
+* Beyond some funny types, it's not much boilerplate.
+* **But how does it work?!**
+
+---
+
+# Start with a functor
+
+We know for our language to compose, we need both:
+
+* `map[F[_], A, B](fa: F[A])(f: A => B): F[B]`
+* `flatMap[F[_], A, B](fa: F[A])(f: A => F[B]): F[B]`
+
+A *functor* gives us just the `map`:
+
+```tut:silent
+trait Functor[F[_]] {
+  def map[A, B](fa: F[A])(f: A => B): F[B]
+}
+```
+
+`map` also satisfies some laws, but we won't cover them today.
+
+---
+
+# Yoneda lemma
+
+The *Yoneda lemma* specializes in Scala to say:
+
+We can write any `F[_]` in terms of `Coyoneda[_[_], _]`,
+described as:
+
+```tut:silent
+trait Coyoneda[F[_], A] {
+  type I
+  val fi: F[I]
+  def f: I => A
+}
+```
+
+---
+
+# All `F[_]`'s are `Coyoneda`s
+
+Let's try converting any `F[_]` to `Coyoneda[_[_], _]`:
+
+```tut:silent
+// convenience constructor
+def newCoyo[F[_], A, B](fa: F[A])(_f: A => B) =
+  new Coyoneda[F, B] {
+    type I = A
+    val fi = fa
+    def f = _f
+  }
+
+def liftC[F[_], A](fa: F[A]): Coyoneda[F, A] =
+  newCoyo(fa)(identity)
+```
+
+We can also convert it back if it's a functor:
+
+```tut:silent
+def unliftC[F[_], A](coyo: Coyoneda[F, A])
+    (implicit functor: Functor[F]): F[A] =
+  functor.map(coyo.fi)(coyo.f)
+```
+
+---
+
+# Functor for free
+
+Note that Coyoneda is a functor for all `F[_]`:
+
+```tut:silent
+implicit def coyoFunctor[F[_]]: Functor[Coyoneda[F, ?]] =
+    new Functor[Coyoneda[F, ?]] {
+      def map[A, B](coyo: Coyoneda[F, A])(f: A => B)
+          : Coyoneda[F, B] { type I = coyo.I }  =
+        newCoyo(coyo.fi)(coyo.f andThen f)
+    }
+```
+
+Thing are getting advanced:
+* path-dependent types need explicit type refinement
+* the "?" notation is from Erik Osheim's kind-projector plugin.
+
+By converting our grammar to a Coyoneda, we get a functor, so we can `map`.
+
+---
+
+# What about `flatMap`?
+
+We've got a free functor now.
+
+If we had a free monad, we'd get both `map` and `flatMap`:
+
+```tut:silent
+trait Monad[F[_]] extends Functor[F] {
+  def point[A](a: A): F[A]
+  def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]
+}
+```
+
+These functions also have laws that we won't talk about today.
+
+---
+
+# Getting a free monad
+
+This data structure will prove useful:
+
+```tut:silent
+sealed abstract class FreeM[F[_], A]
+case class Done[F[_], A](a: A) extends FreeM[F, A]
+case class More[F[_], A](next: F[FreeM[F, A]]) extends FreeM[F, A]
+```
+
+Stare at this recursive type; let it sink in.
+
+* “Free” has a rigorous mathematical definition.
+* `scalaz.Free` is one of many free structures.
+* `scalaz.FreeAp` is a free applicative functor.
+* For us “free” connotes a minimal necessary structure.
+
+---
+
+# From a functor to a monad
+
+If we have a functor for an `F[_]`, then we get a monad for `FreeM[F, ?]`:
+
+```tut:silent
+implicit def freeMonad[F[_]]
+    (implicit functor: Functor[F]): Monad[FreeM[F, ?]] =
+
+  new Monad[FreeM[F, ?]] {
+
+    def point[A](a: A): FreeM[F, A] = Done(a)
+
+    def map[A, B](ffa: FreeM[F, A])(f: A => B): FreeM[F, B] =
+      ffa match {
+        case Done(a) => Done(f(a))
+        case More(fa) => More(functor.map(fa) { map(_)(f) })
+      }
+
+    def flatMap[A, B](ffa: FreeM[F, A])(f: A => FreeM[F, B]): FreeM[F, B] =
+      ffa match {
+        case Done(a) => f(a)
+        case More(fa) => More(functor.map(fa) { flatMap(_)(f) })
+      }
+
+  }
+```
+
+---
+
+# What do we have thus far?
+
+* We can turn `F[_]` into `Coyoneda[F, _]`
+* `Coyoneda[F, _]` has a functor instance
+* Given a functor, `FreeM` gives us a monad instance
+
+For this type:
+
+```tut:silent
+type FreeC[F[_], A] = FreeM[Coyoneda[F, ?], A]
+```
+
+We should be able to lift a simple `F[_]` to `FreeC[F, _]`:
+
+```scala
+def liftFC[F[_], A](fa: F[A]): FreeC[F, A] = ???
+```
+
+---
+
+# Lifting `F[_]` to `FreeC[F, _]`
+
+Unfortunately, Scala needs an “unapply” trick to disambiguate nested types.
+
+```tut:silent
+import scalaz.Unapply
+
+def liftF[F[_], A](fa: => F[A])
+    (implicit functor: Functor[F]): FreeM[F, A] =
+  More(functor.map(fa)(Done[F, A]))
+
+def liftFU[MA](ma: => MA)
+    (implicit u: Unapply[Functor, MA]): FreeM[u.M, u.A] =
+  liftF(u(ma))(u.TC)
+```
+
+With `Unapply` we can finally get `liftFC`:
+
+```tut:silent
+def liftFC[F[_], A](fa: F[A]): FreeC[F, A] =
+  liftFU(liftC(fa))
+```
+
+Learning more about `Unapply` is another talk.
+
+---
+
+# Now, the interpretter
+
+At this point, we have `liftFC` defined so we can:
+
+* make instances of our declarative language
+* compose these instances monadically
+
+Lastly, we need `runFC` so we can run different interpreters.
+
+---
+
+# Finally, runFC
+
+```tut:silent
+// Needed for type ascription
+def foldFC[F[_], A, B](fa: FreeM[F, A])
+    (ifDone: A => B)(ifMore: F[FreeM[F, A]] => B): B =
+  fa match {
+    case Done(a) => ifDone(a)
+    case More(f) => ifMore(f)
+  }
+
+def runFC[F[_], G[_], A]
+    (free: FreeC[F, A])(natTrans: F ~> G)
+    (implicit monad: Monad[G])
+    : G[A] =
+    foldFC[Coyoneda[F, ?], A, G[A]](free)(monad.point) { coyo =>
+      monad.flatMap(natTrans(coyo.fi)) { x =>
+        runFC(coyo.f(x))(natTrans)
+      }
+    }
+```
+
+---
+
+# BANG!
+
+(This would all be more exciting if we didn't see the punch-line already.)
+
+Here's some point to take away:
+
+* Making small command languages is easy.
+* Making different interpretters is easy.
+* Interpretters don't need to share a common interface.
+* Free monads separate concerns and hide complexity.
+* Free monads can help build extensible systems.
+
+---
+
+# Next Steps
+
+* Our `FreeM` isn't stack-safe (use `scalaz.Free`).
+* Mix free grammars with something called `Coproduct`.
+* Compare free grammars with other “expression problem” solutions.
+* Learn work-arounds for GADTs when they fail in Scala.
+
+---
+
+# References
+
+* R. Bjarnason. “Stackless Scala With Free Monads”
+* R. Norris. https://github.com/tpolecat/examples
+* R. Bjarnason and P. Chiusano. *Functional Programming in Scala*
+* S. Seefried.  http://lambdalog.seanseefried.com/posts/2011-11-22-gadts-in-scala.html
+* G. Gonzalez. http://www.haskellforall.com/2012/06/gadts.html
+* honestly, there's too many to list…
+
+---
+
+# This material
+
+Half-literate programming actually worked for this presentation.
+
+Find it at https://github.com/shajra/shajra-presentations.
+
+This presentation is a combination of
+  * Rob Norris's `tut` SBT plugin (all code is compiler-checked)
+  * remark.js
+
+</textarea>
+    <script src="javascript/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
