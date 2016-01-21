@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+  </head>
+  <body>
+<textarea id="source">
+
+class: center, middle
+
+# Explicit Effects w/o Implicit Side-effects
+### Sukant Hajra / @shajra
+
+---
+
+# Here is an (implicit) effect:
+
+```tut
+val printIt = println("it")
+```
+
+---
+
+# What if these were effects too?
+
+```tut
+val twoPrintIts = List(printIt, printIt)
+val fourPrintIts = twoPrintIts ++ twoPrintIts
+```
+
+Then we could work with effects as if they were simple values/data.
+
+---
+
+# FP makes effects values.
+
+Beyond “programming with functions,” in FP:
+
+* everything is a value
+* values don't change once defined
+* expressions can be substituted with their evaluations
+* the evaluation policy affects computation, not results
+
+---
+
+# Scala laxly enforces principles.
+
+In Scala, we have both
+
+* values
+* side-effects
+
+which don't mix well; but we can tame them with:
+
+* understanding
+* discipline
+* libraries like scalaz and scalaz-stream.
+
+---
+
+# Let's make an effect as a *value*.
+
+```tut:silent
+class Eff[A](a: => A) {
+  def unsafeRun: A = a
+}
+
+object Eff { def apply[A](a: => A) = new Eff(a) }
+```
+
+Call-by-name (`=> A`) just wraps the effect in a function that takes no
+arguments.
+
+---
+
+# We can reference effects without running them.
+
+```tut
+val eff = Eff { print("it") }
+val effs = List(eff, eff)
+```
+
+`Eff` turns *implicit* side-effects into *explicit* effects.
+
+---
+
+# Can FP do imperative programming?
+
+```tut:silent
+class Eff[A](a: => A) {
+
+  def unsafeRun: A = a
+
+  def map[B](f: A => B): Eff[B] =
+    new Eff[B](f(unsafeRun))
+
+  def flatMap[B](f: A => Eff[B]): Eff[B] =
+    new Eff[B](f(unsafeRun).unsafeRun)
+
+}
+
+object Eff { def apply[A](a: => A) = new Eff(a) }
+```
+
+This is the same `Eff` as before, but with `map` and `flatMap` methods.
+
+---
+
+# Let's make effects to play with.
+
+```tut:silent
+val getNum: Eff[Long] =
+  Eff { System.currentTimeMillis % 10 }
+```
+
+```tut:silent
+def printIt[A](a: A): Eff[Unit] =
+  Eff { println(a) }
+```
+
+---
+
+# This look imperative, right?
+
+```tut:silent
+val sillyEff: Eff[Long] =
+  for {
+    time <- getNum
+    _ <- printIt(time)
+  } yield time + 1
+```
+
+Once composed, we run it.
+
+```tut
+sillyEff.unsafeRun
+```
+
+---
+
+# Seeing for-yield desugared may help.
+
+```tut:silent
+val sillyEffDesugar: Eff[Long] =
+  getNum flatMap { time =>
+    printIt(time) map { _ =>
+        time + 1
+    }
+  }
+```
+
+```tut
+sillyEffDesugar.unsafeRun
+```
+
+---
+
+# Some notes on calling `unsafeRun`:
+
+The type of a program is `Eff[Unit]`.
+
+We combine effects with `flatMap` until we have one such program.
+
+We mix in non-effects using `map`
+
+We call `unsafeRun` only once “at the end of the world.”
+
+Calling `unsafeRun` is a single step between
+* the JVM interpretter
+* our pure FP program.
+
+---
+
+# Scalaz's `Task` is a better `Eff`.
+
+Here's a little setup:
+
+```tut:silent
+import scalaz.concurrent.Task
+
+val getNumTask: Task[Long] =
+  Task delay { System.currentTimeMillis % 10 }
+
+def printTask[A](a: A): Task[Unit] =
+  Task delay { print(a) }
+
+def printlnTask[A](a: A): Task[Unit] =
+  Task delay { println(a) }
+```
+
+---
+
+# You can use `Task` like `Eff`.
+
+```tut:silent
+val sillyTask: Task[Long] =
+  for {
+    time <- getNumTask
+    _ <- printlnTask(time)
+  } yield time + 1
+```
+
+Task has both a `map` and `flatMap` method, so we get the same imperative
+style.
+
+```tut
+sillyTask.run
+```
+
+---
+
+# Here's a taste of `Task`'s features:
+
+For convenience, we'll import some of scalaz
+
+```tut:silent
+import scalaz.std.list._
+import scalaz.syntax.monad._
+import scalaz.syntax.traverse._
+```
+
+so we can sequence two Tasks.
+
+```tut:silent
+def workTask[A](a: A): Task[A] =
+  printTask(s"${a} ") >> Task(a)
+```
+The `>>` syntax sequences two Tasks, returning the value of the second task.
+
+---
+
+# Here's some tasks:
+
+```tut:silent
+val printTasks: List[Task[Int]] =
+  List range (1,8) map workTask
+```
+
+---
+
+# We control how we combine our tasks.
+
+Here we sequence them:
+
+```tut
+printTasks.sequence.run
+```
+
+Here we run them in parallel:
+
+```tut
+Task.gatherUnordered(printTasks).run
+```
+
+---
+
+# But what about Scala's `Future`?
+
+```tut:silent
+import scala.concurrent.{ Await, Future }
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+```
+
+Many libraries use Scala's `Future`s for asynchronous side-effects.
+
+---
+
+# Just creating our `Future`s runs them in parallel.
+
+```tut:silent
+def workFuture(i: Int): Future[Int] =
+  Future { println(i); i }
+```
+
+```tut
+List range (1,8) map workFuture
+```
+
+We have no chance to sequence them.
+
+```tut:invisible
+Thread sleep 500  // to allow stdout to flush
+```
+
+---
+
+# We use evaluation to sequence `Futures`.
+
+```tut
+List.range(2,6).foldLeft(workFuture(1)) { (future, next) =>
+  future flatMap { _ => workFuture(next) }
+}
+```
+
+One point of FP is to avoid thinking of evaluation.
+
+---
+
+# Also, `Future`s cache results.
+
+
+```tut:silent
+val getTimeFuture: Future[Long] = Future { System.currentTimeMillis }
+val waitFuture: Future[Unit] = Future { Thread sleep 10 }
+```
+
+```tut:silent
+val twoFutures: Future[(Long, Long)] =
+  for {
+    a <- getTimeFuture
+    _ <- waitFuture
+    b <- getTimeFuture
+  } yield (a, b)
+```
+
+We get the same number twice:
+
+```tut
+Await result (twoFutures, 1 second)
+```
+
+---
+
+# `Future` is sensitive to val/def choice
+
+By changing `getTimeFuture` from a val to a def
+
+```tut:silent
+def getTimeFuture: Future[Long] = Future { System.currentTimeMillis }
+val waitFuture: Future[Unit] = Future { Thread sleep 10 }
+
+val twoFutures: Future[(Long, Long)] =
+  for {
+    a <- getTimeFuture
+    _ <- waitFuture
+    b <- getTimeFuture
+  } yield (a, b)
+```
+
+we get different numbers back:
+
+```tut
+Await result (twoFutures, 1 second)
+```
+
+---
+
+# scalaz-stream gives us streams of `Task`s.
+
+```tut:silent
+import scalaz.stream.Process
+```
+
+```tut:silent
+val process: Process[Task, Int] =
+  Process.
+    iterateEval(0) { i => printTask(s"${i} ") >> Task.now(i + 1) }
+```
+
+---
+
+# `Process` has “collections” like operations.
+
+```tut:silent
+val process: Process[Task, Int] =
+  Process.
+    iterateEval(0) { i => printTask(s"${i} ") >> Task.now(i + 1) }.
+    take(10)
+```
+
+---
+
+# Running a `Process` yields a `Task`
+
+```tut:silent
+val processTask: Task[Unit] =
+  Process.
+    iterateEval(0) { i => printTask(s"${i} ") >> Task.now(i + 1) }.
+    take(10).
+    run
+```
+
+which we run “at the end of the world”
+
+```tut
+processTask.run
+```
+
+---
+
+# Of course, `Task` and `Process` do more
+
+Both `Task` and `Process` can do resource management.
+
+`Process`es can mix with different sinks and sources for richer dataflow.
+
+---
+
+# Here's some points to take away:
+
+* “Imperative” is just a style
+* FP is *great* for imperative programming
+* FP allows us to freely refactor our effects
+* FP allows us to freely combine our effects
+
+---
+
+# This material
+
+Half-literate programming actually worked for this presentation.
+
+Find it at https://github.com/shajra/shajra-presentations.
+
+This presentation is a combination of
+  * Rob Norris's `tut` SBT plugin (all code is compiler-checked)
+  * remark.js
+
+</textarea>
+    <script src="javascript/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
