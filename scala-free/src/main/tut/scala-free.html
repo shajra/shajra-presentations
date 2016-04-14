@@ -87,7 +87,7 @@ case class PrintLine(s: String) extends ConsoleOp[Unit]
 * Now we have return types.
 * It's not obvious how we compose them.
 
-Technically, this is a Generalized Algebraic Data Type (GADT) encoding.
+Technically, this is a *generalized algebraic data type (GADT)* encoding.
 
 * GADTs in Scala are fragile.
 * GADTs in Scala are another talk.
@@ -129,6 +129,7 @@ def consoleRun: ConsoleIO[Unit] =
 
 * composing commands with functions!
 * **just data** — doesn't *do* anything
+* an imperative style with pure functions
 
 ---
 
@@ -358,7 +359,7 @@ def unliftC[F[_], A](coyo: Coyoneda[F, A])
 
 ---
 
-# Functor for free
+# `Coyoneda` yields a functor for free
 
 Note that Coyoneda is a functor for all `F[_]`:
 
@@ -401,7 +402,7 @@ These functions also have laws that we won't talk about today.
 This data structure will prove useful:
 
 ```tut:silent
-sealed abstract class FreeM[F[_], A]
+sealed trait FreeM[F[_], A]
 case class Done[F[_], A](a: A) extends FreeM[F, A]
 case class More[F[_], A](next: F[FreeM[F, A]]) extends FreeM[F, A]
 ```
@@ -409,9 +410,9 @@ case class More[F[_], A](next: F[FreeM[F, A]]) extends FreeM[F, A]
 Stare at this recursive type; let it sink in.
 
 * “Free” has a rigorous mathematical definition.
+* For us “free” connotes a minimal necessary structure.
 * `scalaz.Free` is one of many free structures.
 * `scalaz.FreeAp` is a free applicative functor.
-* For us “free” connotes a minimal necessary structure.
 
 ---
 
@@ -543,8 +544,8 @@ Here's some point to take away:
 # Next Steps
 
 * Our `FreeM` isn't stack-safe (use `scalaz.Free`).
-* Mix free grammars with something called `Coproduct`.
 * Compare free grammars with other “expression problem” solutions.
+* Mix free grammars with something called `Coproduct`.
 * Learn work-arounds for GADTs when they fail in Scala.
 
 ---
