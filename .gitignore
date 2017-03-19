@@ -2,3 +2,4 @@ target/
 *.pdf
 /scala-typeclasses/*.tex
 scala-haskell/part-haskell/lyah.html
+.stack-work/
