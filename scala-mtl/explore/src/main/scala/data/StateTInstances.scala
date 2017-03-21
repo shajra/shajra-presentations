@@ -45,6 +45,8 @@ object StateTInstances {
       new MonadReader[R, StateT[S, F, ?]] {
         val monad = new StateTMonad[S, F] { val M = MR.monad }
         def ask = MR.ask.liftT[StateT[S, ?[_], ?]]
+        def local[A](ma: StateT[S, F, A])(f: R => R) =
+          StateT(s => MR.local(ma.run(s))(f))
       }
 
     implicit def stateTMonadError[S, E, F[_]]

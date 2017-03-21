@@ -46,6 +46,8 @@ object EitherTInstances {
       new MonadReader[R, EitherT[E, F, ?]] {
         val monad = new EitherTMonad[E, F] { val M = MR.monad }
         def ask = MR.ask.liftT[EitherT[E, ?[_], ?]]
+        def local[A](ma: EitherT[E, F, A])(f: R => R) =
+          EitherT(MR.local(ma.run)(f))
       }
 
     implicit def eitherTMonadState[E, S, F[_]]

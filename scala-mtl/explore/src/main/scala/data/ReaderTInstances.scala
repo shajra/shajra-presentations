@@ -38,6 +38,7 @@ object ReaderTInstances {
       new MonadReader[R, ReaderT[R, F, ?]] {
         val monad = readerTMonad(F)
         def ask: ReaderT[R, F, R] = ReaderT.ask
+        def local[A](ma: ReaderT[R, F, A])(f: R => R) = ReaderT { ma run f(_) }
       }
 
     implicit def readerTMonadState[R, S, F[_]]
