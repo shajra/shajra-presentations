@@ -1,7 +1,6 @@
 package scalaz
 package typeclass
 
-import data.Disjunction._
 
 trait Choice[P[_, _]] {
   def profunctor: Profunctor[P]
@@ -14,4 +13,3 @@ trait Choice[P[_, _]] {
 object Choice extends ChoiceInstances {
   def apply[P[_, _]](implicit P: Choice[P]): Choice[P] = P
 }
-

@@ -21,8 +21,4 @@ object Disjunction extends DisjunctionInstances with DisjunctionFunctions {
   case class -\/[L, R](value: L) extends (L \/ R)
   case class \/-[L, R](value: R) extends (L \/ R)
 
-  def swap[L, R](ab: L \/ R): R \/ L = ab.fold[R \/ L](\/-(_))(-\/(_))
-
-  def fromEither[L, R](ab: Either[L, R]): L \/ R = ab.fold(-\/(_), \/-(_))
-
 }

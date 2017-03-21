@@ -23,6 +23,15 @@ object EitherTInstances {
         def liftT[F[_] : Monad, B](a: F[B]) = EitherT(a.map(\/.right))
       }
 
+    implicit def eitherTMonadBase[R, B[_], F[_]](implicit M: MonadBase[B, F])
+       : MonadBase[B, EitherT[R, F, ?]] =
+      new MonadBase[B, EitherT[R, F, ?]] {
+        def monad = eitherTMonad(M.monad)
+        def monadBase = M.monadBase
+        def liftBase[A](base: B[A]) =
+          M.liftBase(base).liftT[EitherT[R, ?[_], ?]]
+      }
+
     implicit def eitherTMonadError[E, F[_]]
         (implicit F: Monad[F]): MonadError[E, EitherT[E, F, ?]] =
       new MonadError[E, EitherT[E, F, ?]] {

@@ -4,10 +4,20 @@ package scalaz
 import typeclass._
 
 
-class BaseHierarchy extends BaseHierarchy.BH7
+trait BaseHierarchy extends BaseHierarchy.BH9
 
 
 object BaseHierarchy {
+
+  object Default extends BaseHierarchy
+
+  trait BH9 extends BH8 {
+    implicit def monadBaseMMonad[B[_], M[_]](implicit M: MonadBase[B, M]): Monad[M] = M.monad
+  }
+
+  trait BH8 extends BH7 {
+    implicit def monadBaseBMonad[B[_], M[_]](implicit M: MonadBase[B, M]): Monad[B] = M.monadBase
+  }
 
   trait BH7 extends BH6 {
     implicit def monadErrorMonad[E, M[_]](implicit M: MonadError[E, M]): Monad[M] = M.monad

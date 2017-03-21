@@ -9,4 +9,3 @@ trait Monad[M[_]] {
 object Monad extends MonadInstances {
   def apply[M[_]](implicit M: Monad[M]): Monad[M] = M
 }
-

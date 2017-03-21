@@ -2,9 +2,6 @@ package scalaz
 package data
 
 
-import typeclass.{Functor, Monad, MonadTrans, Profunctor}
-
-
 trait UpStarInstances {
 
   implicit def upstarProfunctor[F[_]](implicit F: Functor[F])

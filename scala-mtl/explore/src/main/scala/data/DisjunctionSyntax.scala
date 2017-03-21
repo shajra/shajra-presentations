@@ -1,7 +1,7 @@
 package scalaz
 package data
 
-import Disjunction.{\/, \/-, -\/}
+import Disjunction.{\/-, -\/}
 
 trait DisjunctionSyntax {
   implicit class ToEitherOps[A](a: A) {

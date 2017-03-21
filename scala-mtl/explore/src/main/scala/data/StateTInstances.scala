@@ -23,6 +23,15 @@ object StateTInstances {
         def liftT[F[_] : Monad, B](a: F[B]) = StateT(s => a map { (s, _) })
       }
 
+    implicit def stateTMonadBase[R, B[_], F[_]](implicit M: MonadBase[B, F])
+       : MonadBase[B, StateT[R, F, ?]] =
+      new MonadBase[B, StateT[R, F, ?]] {
+        def monad = stateTMonad(M.monad)
+        def monadBase = M.monadBase
+        def liftBase[A](base: B[A]) =
+          M.liftBase(base).liftT[StateT[R, ?[_], ?]]
+      }
+
     implicit def stateTMonadState[S, F[_]]
         (implicit F: Monad[F]): MonadState[S, StateT[S, F, ?]] =
       new MonadState[S, StateT[S, F, ?]] {

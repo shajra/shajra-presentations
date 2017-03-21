@@ -3,7 +3,8 @@ package data
 
 
 import scalaz.typeclass.
-  { ApplyClass, ApplicativeClass, BindClass, FunctorClass, MonadClass }
+  { ApplyClass, ApplicativeClass, BindClass, FunctorClass, MonadClass,
+    MonadBaseClass }
 
 
 trait ReaderTInstances extends ReaderTInstances.Instances0
@@ -21,6 +22,15 @@ object ReaderTInstances {
         : MonadTrans[λ[(F[_], A) => ReaderT[E, F, A]]] =
       new MonadTrans[λ[(F[_], A) => ReaderT[E, F, A]]] {
         def liftT[F[_] : Monad, B](a: F[B]) = ReaderT(_ => a)
+      }
+
+    implicit def readerTMonadBase[R, B[_], F[_]](implicit M: MonadBase[B, F])
+       : MonadBase[B, ReaderT[R, F, ?]] =
+      new MonadBase[B, ReaderT[R, F, ?]] {
+        def monad = readerTMonad(M.monad)
+        def monadBase = M.monadBase
+        def liftBase[A](base: B[A]) =
+          M.liftBase(base).liftT[ReaderT[R, ?[_], ?]]
       }
 
     implicit def readerTMonadReader[R, F[_]]

@@ -1,8 +1,11 @@
 package scalaz
 package data
 
-import typeclass._
-import Disjunction.{\/, -\/, \/-}
+
+import typeclass.MonadClass
+
+import Disjunction.{-\/, \/-}
+
 
 trait DisjunctionInstances {
   implicit def monad[L]: Monad[L \/ ?] = new MonadClass.Template[L \/ ?] {

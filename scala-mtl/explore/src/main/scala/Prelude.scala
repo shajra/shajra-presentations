@@ -6,8 +6,7 @@ import data._
 import scala.language.implicitConversions
 
 trait Prelude
-    extends BaseHierarchy
-    with data.DisjunctionFunctions
+    extends data.DisjunctionFunctions
     with data.DisjunctionSyntax
     with data.IdentityTypes
     with data.MaybeFunctions
@@ -22,6 +21,7 @@ trait Prelude
     with typeclass.BindSyntax
     //with typeclass.MonadFunctions
     with typeclass.MonadSyntax
+    with typeclass.MonadBaseSyntax
     with typeclass.MonadErrorSyntax
     with typeclass.MonadStateSyntax
     //with typeclass.FoldableFunctions
@@ -66,6 +66,9 @@ trait Prelude
   type MonadTrans[F[_[_], _]] = typeclass.MonadTrans[F]
   val MonadTrans = typeclass.MonadTrans
 
+  type MonadBase[B[_], M[_]] = typeclass.MonadBase[B, M]
+  val MonadBase = typeclass.MonadBase
+
   type MonadError[E, F[_]] = typeclass.MonadError[E, F]
   val MonadError = typeclass.MonadError
 
@@ -96,4 +99,7 @@ trait Prelude
 
 }
 
-object Prelude extends Prelude
+object Prelude extends Prelude {
+  object Base extends Prelude
+  object Default extends Prelude with BaseHierarchy
+}
