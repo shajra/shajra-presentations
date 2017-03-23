@@ -1,13 +1,14 @@
 TARGET_DIR := presentation/target/scala-2.12/tut
 HEADER := $(TARGET_DIR)/header.tex
 SOURCES := $(sort $(wildcard $(TARGET_DIR)/*.md))
-PDF := $(TARGET_DIR)/scala-validation.pdf
+PDF := $(TARGET_DIR)/scala-mtl.pdf
 
 
 pdf: $(PDF)
 
 $(PDF): $(HEADER) $(SOURCES)
 	pandoc \
+		--from markdown \
 		--to beamer \
 		-H $(HEADER) \
 		-V theme:Boadilla \
