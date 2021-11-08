@@ -1,0 +1,29 @@
+\mode<presentation>
+
+% Frame title
+\defbeamertemplate*{frametitle}{simspace}[1][]
+{
+	\vskip 0.5cm
+	\begin{beamercolorbox}[wd=\paperwidth, ht=1.2cm]{frametitle}
+		\begin{tikzpicture}
+			\useasboundingbox[fill=white](0,0) rectangle(\the\paperwidth, 1.2);
+			\fill[simspace-blue-dark] (0,0) rectangle(2.95, 1.2);
+			\fill[simspace-blue-light] (3.05, 0) rectangle(\the\paperwidth, 1.2);
+			\ifx\insertframesubtitle\@empty
+				{
+					\node[anchor=west, white, font=\huge] at (3.2,0.61)
+					{ \insertframetitle };
+				}
+				\else
+				{
+					\node[anchor= west, white, font=\Huge] at (3.2,0.66)
+					{ \insertframetitle };
+					\node[anchor= west, white, font=\small] at (3.2,0.26)
+					{ \insertframesubtitle };
+				}
+			\fi
+		\end{tikzpicture}
+	\end{beamercolorbox}
+}
+
+\mode<all>

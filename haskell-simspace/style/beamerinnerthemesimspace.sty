@@ -1,0 +1,48 @@
+\mode<presentation>
+
+\setbeamerfont{title}{size={\fontsize{32}{36}}}
+\setbeamerfont{structure}{shape=\slshape}
+\setbeamerfont{section title}{size={\fontsize{32}{36}}}
+
+\setbeamertemplate{background}
+{
+	\begin{tikzpicture}
+		\useasboundingbox (0,0) rectangle(\the\paperwidth, \the\paperheight);
+		\ifnum \thepage > 1
+			\node[anchor=south west, inner sep=0] at (13.5, 0.15)
+			{ \includegraphics[width=0.15\textwidth]{images/simspace.logo.color.eps} };
+		\else
+			\node[anchor=south west, inner sep=0] at (7, 1)
+			{ \includegraphics[width=0.4\textwidth]{images/simspace.logo.color.eps} };
+		\fi
+	\end{tikzpicture}
+}
+
+\defbeamertemplate*{title page}{simspace}[1][]
+{
+	\begin{beamercolorbox}[sep=8pt, #1]{title page header}
+		\usebeamerfont{title}\inserttitle{}
+	\end{beamercolorbox}
+	\vskip 1cm
+	\begin{beamercolorbox}[leftskip=0.1\paperwidth, #1]{author}
+		\usebeamerfont{author}\insertauthor{}
+	\end{beamercolorbox}
+	\begin{beamercolorbox}[leftskip=0.1\paperwidth, #1]{institute}
+		\usebeamerfont{author}\insertinstitute{}
+	\end{beamercolorbox}
+	\begin{beamercolorbox}[leftskip=0.1\paperwidth, #1]{date}
+		\usebeamerfont{date}\insertdate{}
+	\end{beamercolorbox}
+	\vfill
+}
+
+\setbeamertemplate{section page}
+{
+	\begin{centering}
+		\begin{beamercolorbox}[sep=4pt,center]{part title}
+			\usebeamerfont{section title}\insertsection{}
+		\end{beamercolorbox}
+	\end{centering}
+}
+
+\mode<all>

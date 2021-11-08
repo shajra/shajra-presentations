@@ -1,0 +1,4 @@
+source = "haskell-simspace.tex"
+
+[programs.latex]
+opts = ["-shell-escape"]

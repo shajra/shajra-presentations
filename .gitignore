@@ -1,4 +1,3 @@
-target/
 *.aux
 *.log
 *.nav
@@ -7,6 +6,12 @@ target/
 *.snm
 *.synctex.gz
 *.toc
-/scala-typeclasses/*.tex
-scala-haskell/part-haskell/lyah.html
+*.vrb
+
+.auctex-auto/
 .stack-work/
+target/
+_minted-*/
+
+scala-haskell/part-haskell/lyah.html
+/scala-typeclasses/*.tex

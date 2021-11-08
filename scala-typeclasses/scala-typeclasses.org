@@ -8,6 +8,12 @@
 
 * Introduction
 
+** Example of a quote
+
+#+BEGIN_QUOTE
+Beware pity maxims
+#+END_QUOTE
+
 ** A show of hands
 
 - How many of you are very new to type classes?
