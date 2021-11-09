@@ -1,5 +1,12 @@
 target/
+*.aux
+*.log
+*.nav
+*.out
 *.pdf
+*.snm
+*.synctex.gz
+*.toc
 /scala-typeclasses/*.tex
 scala-haskell/part-haskell/lyah.html
 .stack-work/
